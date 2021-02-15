@@ -1,15 +1,13 @@
 import atexit
 import json
 import os
-
 import sys
+import threading
 from functools import partial
 
-from PySide2 import QtCore, QtWidgets
-from PySide2.QtCore import Qt, Slot, Signal, QObject
-
-import threading
 import zmq
+from PySide2 import QtCore, QtWidgets
+from PySide2.QtCore import QObject, Qt, Signal, Slot
 
 #  files imports
 from chain import Blockchain

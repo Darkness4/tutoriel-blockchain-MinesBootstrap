@@ -1,0 +1,21 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+coincurve = "==15.0.0"
+base58 = "==2.1.0"
+PySide2 = "==5.15.2"
+pyzmq = "==22.0.3"
+
+[dev-packages]
+black = "*"
+pylama = "*"
+pylint = "*"
+
+[requires]
+python_version = "3.8"
+
+[pipenv]
+allow_prereleases = true
