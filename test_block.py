@@ -1,11 +1,12 @@
 import time
-from transaction import Transaction
+
 from block import Block
 from key import BitcoinAccount
+from transaction import Transaction
 
 wallet = BitcoinAccount()
 
-difficulty = 4
+difficulty: int = 4
 
 first_block = Block(0, "")
 
@@ -19,6 +20,9 @@ print("First block is: ")
 print(first_block)
 
 last_hash = first_block.hashval
+
+if last_hash == None:
+    raise ValueError("hash is None.")
 
 second_block = Block(1, last_hash)
 

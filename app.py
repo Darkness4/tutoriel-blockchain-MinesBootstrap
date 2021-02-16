@@ -4,10 +4,12 @@ import os
 import sys
 import threading
 from functools import partial
+from typing import Optional
 
 import zmq
 from PySide2 import QtCore, QtWidgets
 from PySide2.QtCore import QObject, Qt, Signal, Slot
+from zmq.backend import Socket
 
 #  files imports
 from chain import Blockchain
@@ -23,7 +25,7 @@ wallet.to_file(file_name)
 #  blockchain data
 
 difficulty = 3
-blockchain = None
+blockchain: Optional[Blockchain] = None
 peers = set()
 
 # list_ports = ["5556", "5557", "5558"]
@@ -67,7 +69,7 @@ class Chain_Dialog(QtWidgets.QDialog):
         chain_label = QtWidgets.QLabel(
             json.dumps(blockchain.to_dict(), indent=4, sort_keys=True)
         )
-        chain_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        chain_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         self.scrollArea = QtWidgets.QScrollArea()
         self.scrollArea.setWidgetResizable(True)

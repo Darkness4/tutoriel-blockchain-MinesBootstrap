@@ -1,8 +1,7 @@
-import copy
 import logging
 import time
 from dataclasses import asdict, dataclass, field
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from block import Block
 from transaction import Transaction
@@ -24,7 +23,7 @@ class Blockchain:
             )
             return
         block = Block(index=0, previous_hash="0", timestamp=time.time())
-        block.hashval = block.compute_hash()
+        block.mine(self.difficulty)
         self.__chain.append(block)
 
     @property
@@ -35,7 +34,7 @@ class Blockchain:
     def head(self) -> Block:
         return self.__chain[-1]
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     def add_transaction(
@@ -56,13 +55,16 @@ class Blockchain:
         if not self.__unconfirmed_transactions:
             return -1
 
+        if self.head.hashval == None:
+            raise Exception("hashval of blockchain head is None.")
+
         new_block = Block(
             index=self.head.index + 1,
             timestamp=time.time(),
             previous_hash=self.head.hashval,
         )
         new_block.add_transactions(self.__unconfirmed_transactions)
-        new_block.hashval = new_block.mine(self.difficulty)
+        new_block.mine(self.difficulty)
         self.__chain.append(new_block)
         self.__unconfirmed_transactions = []
         return new_block.index

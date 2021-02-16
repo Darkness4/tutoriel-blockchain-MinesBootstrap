@@ -1,5 +1,5 @@
-from key import verify_signature
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -8,4 +8,4 @@ class Transaction:
     receiver: str
     amount: float
     timestamp: float = 0
-    tx_number: int = None
+    tx_number: Optional[int] = None
