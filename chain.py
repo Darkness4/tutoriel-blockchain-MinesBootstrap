@@ -3,7 +3,7 @@ import logging
 import platform
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from block import Block
 from transaction import Transaction
@@ -47,9 +47,9 @@ class Blockchain:
         )
         self.tx_pool.append(transaction)
 
-    def mine_block(self) -> int:
+    def mine_block(self) -> Optional[Block]:
         if not self.tx_pool:
-            return -1
+            return None
 
         if self.head.hashval == None:
             raise Exception("hashval of blockchain head is None.")
@@ -62,45 +62,61 @@ class Blockchain:
         )
         new_block.add_transactions(self.tx_pool)
         new_block.mine(self.difficulty)
-        self.__add_block(new_block)
+        result = self.__add_block(new_block)
         self.tx_pool.clear()
-        return new_block.index
+        return result
 
-    def add_block_from_peer(self, new_block: Block):
-        self.__add_block(new_block)
+    def add_block_from_peer(self, new_block: Block) -> Optional[Block]:
+        result = self.__add_block(new_block)
+        self.tx_pool.clear()
+        return result
 
-    def __add_block(self, new_block: Block):
+    def __add_block(self, new_block: Block) -> Optional[Block]:
         if new_block.timestamp < self.head.timestamp:
             logging.warning("Block REJECTED: Timestamp is not valid.")
             logging.warning(
                 f"new_block.timestamp={new_block.timestamp} < head.timestamp={self.head.timestamp}"
             )
-            return
+            return None
 
         if new_block.index != self.head.index + 1:
             logging.warning("Block REJECTED: Index is not valid.")
             logging.warning(
                 f"new_block.index={new_block.index} != head.index+1={self.head.index+1}"
             )
-            return
+            return None
 
         if new_block.previous_hash != self.head.hashval:
             logging.warning("Block REJECTED: Previous hash is not valid.")
             logging.warning(
                 f"new_block.previous_hash={new_block.previous_hash} != head.hashval={self.head.hashval}"
             )
-            return
+            return None
 
         if not new_block.hash_is_valid(self.difficulty):
             logging.warning("Block REJECTED : Hash is not valid.")
-            return
+            return None
 
         self.blocks.append(new_block)
+        return self.head
 
     def is_valid(self) -> bool:
-        return all(
-            map(lambda x: x.hash_is_valid(self.difficulty), self.blocks)
-        )
+        result = True
+        previous_hash = ""
+
+        for block in self.blocks:
+            if (
+                not block.hash_is_valid(self.difficulty)
+                or previous_hash != block.previous_hash
+            ):
+                logging.error(f"Got Blockchain: {self.blocks}")
+                logging.error(f"Checking Block: {block}")
+                logging.error(f"Previous hash: {previous_hash}")
+                result = False
+                break
+
+            previous_hash = block.hashval
+        return result
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
