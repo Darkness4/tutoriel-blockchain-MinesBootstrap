@@ -11,7 +11,7 @@ blockchain.create_genesis_block()
 print("blockchain: ")
 print(blockchain.to_dict())
 
-first_block = blockchain.chain[-1]
+first_block = blockchain.head
 
 print("First block: ")
 print(first_block)
@@ -22,7 +22,7 @@ blockchain.mine_block()
 
 print("blockchain: ")
 print(blockchain.to_dict())
-second_block = blockchain.chain[-1]
+second_block = blockchain.head
 
 print("Second block: ")
 print(second_block)

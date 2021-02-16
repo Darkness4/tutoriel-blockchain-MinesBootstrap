@@ -2,7 +2,7 @@ import json
 import time
 from dataclasses import asdict, dataclass, field
 from hashlib import sha256
-from typing import List
+from typing import Iterator, List, overload
 
 from key import verify_signature
 from transaction import Transaction
@@ -13,7 +13,7 @@ class Block:
     index: str
     previous_hash: str
     nonce: int = 0
-    timestamp: float = 0
+    timestamp: float = 0.0
     hashval: str = None
     miner: str = None
     __transactions: List[Transaction] = field(default_factory=list)
@@ -21,6 +21,10 @@ class Block:
     @property
     def transactions(self) -> List[Transaction]:
         return self.__transactions
+
+    def add_transactions(self, transactions: Iterator[Transaction]):
+        for transaction in transactions:
+            self.add_transaction(transaction)
 
     def add_transaction(self, transaction: Transaction):
         transaction.tx_number = len(self.transactions)
