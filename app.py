@@ -9,7 +9,6 @@ from typing import Optional
 import zmq
 from PySide2 import QtCore, QtWidgets
 from PySide2.QtCore import QObject, Qt, Signal, Slot
-from zmq.backend import Socket
 
 #  files imports
 from chain import Blockchain

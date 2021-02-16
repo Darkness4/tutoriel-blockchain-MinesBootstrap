@@ -1,8 +1,9 @@
 import json
+import logging
 import time
 from dataclasses import asdict, dataclass, field
 from hashlib import sha256
-from typing import Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from transaction import Transaction
 
@@ -15,11 +16,7 @@ class Block:
     timestamp: float = time.time()
     miner: Optional[str] = None
     hashval: Optional[str] = None
-    __transactions: List[Transaction] = field(default_factory=list)
-
-    @property
-    def transactions(self) -> List[Transaction]:
-        return self.__transactions
+    transactions: List[Transaction] = field(default_factory=list)
 
     def add_transactions(self, transactions: Iterable[Transaction]):
         for transaction in transactions:
@@ -27,10 +24,12 @@ class Block:
 
     def add_transaction(self, transaction: Transaction):
         transaction.tx_number = len(self.transactions)
-        self.__transactions.append(transaction)
+        self.transactions.append(transaction)
 
     def compute_hash(self) -> str:
-        data = json.dumps(asdict(self), sort_keys=True)
+        data_dict = asdict(self)
+        del data_dict["hashval"]
+        data = json.dumps(data_dict, sort_keys=True)
         return sha256(data.encode("utf-8")).hexdigest()
 
     def mine(self, difficulty: int) -> str:
@@ -44,5 +43,39 @@ class Block:
 
         return computed_hash
 
-    def verify_hash(self) -> bool:
-        return self.compute_hash() == self.hashval
+    def hash_is_valid(self, difficulty) -> bool:
+        if self.compute_hash() != self.hashval:
+            logging.error(
+                f"self.compute_hash()={self.compute_hash()} != self.hashval={self.hashval}"
+            )
+            return False
+
+        if not self.hashval.startswith("0" * difficulty):
+            logging.error(f"hashval doesn't start with {difficulty} zero")
+            return False
+        return True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            index=int(data["index"]),
+            previous_hash=data["previous_hash"],
+            nonce=int(data["nonce"]),
+            timestamp=float(data["timestamp"]),
+            miner=data["miner"],
+            hashval=data["hashval"],
+            transactions=list(
+                map(Transaction.from_dict, data["transactions"])
+            ),
+        )
+
+    @classmethod
+    def from_json(cls, data: str):
+        data_dict = json.loads(data)
+        return cls.from_dict(data_dict)
