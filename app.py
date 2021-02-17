@@ -1,4 +1,5 @@
 import atexit
+import time
 from block import Block
 import json
 import logging
@@ -27,7 +28,7 @@ wallet.to_file(file_name)
 #  blockchain data
 
 difficulty = 3
-blockchain: Optional[Blockchain] = Blockchain(difficulty)
+blockchain: Blockchain = Blockchain(difficulty)
 peers = set()  # TODO: Add here, our client
 
 # list_ports = ["5556", "5557", "5558"]
@@ -58,6 +59,8 @@ ConnectionWrite = Connection()
 
 
 def reading_network():
+    global blockchain
+
     while True:
         try:
             data = socket_sub.recv_json()
@@ -72,6 +75,22 @@ def reading_network():
                     )
                 elif data["operation"] == "add_peer":
                     add_peer(Blockchain.from_dict(parameters["blockchain"]))
+                elif data["operation"] == "consensus":
+                    socket.send_json(
+                        {
+                            "operation": "consensus_resp",
+                            "parameters": {"blockchain": blockchain.to_dict()},
+                        }
+                    )
+                elif data["operation"] == "consensus_resp":
+                    peer_blockchain = Blockchain.from_dict(
+                        parameters["blockchain"]
+                    )
+                    if (
+                        len(peer_blockchain) > len(blockchain)
+                        and peer_blockchain.is_valid()
+                    ):
+                        blockchain = peer_blockchain
                 elif data["operation"] == "add_block":
                     add_block(Block.from_dict(parameters["block"]))
 
@@ -103,9 +122,9 @@ def add_block(block: Block):
     result = blockchain.add_block_from_peer(block)
 
     if not result:
-        logging.warn("A block from peer was discarded.")
+        logging.warning("A block from peer was discarded.")
     else:
-        logging.warn(f"A block from peer was added: {result}")
+        logging.warning(f"A block from peer was added: {result}")
 
 
 class Chain_Dialog(QtWidgets.QDialog):
@@ -357,8 +376,15 @@ class MyWidget(QtWidgets.QWidget):
             for _ in range(self.tx_layout.rowCount()):
                 self.tx_layout.removeRow(0)
 
-    def consensus(self):
-        pass  # TODO: Consensus
+    @staticmethod
+    def consensus():
+        socket.send_json(
+            {
+                "operation": "consensus",
+                "parameters": None,
+            }
+        )
+        time.sleep(1)
 
     @Slot(str)
     def get_block_str(self, block_str):

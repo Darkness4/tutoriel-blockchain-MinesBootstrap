@@ -27,9 +27,19 @@ class Block:
         self.transactions.append(transaction)
 
     def compute_hash(self) -> str:
-        data_dict = asdict(self)
-        del data_dict["hashval"]
-        data = json.dumps(data_dict, sort_keys=True)
+        data = (
+            str(self.index)
+            + str(self.previous_hash)
+            + str(self.nonce)
+            + str(self.timestamp)
+            + str(self.miner)
+        )
+        for transaction in self.transactions:
+            data += (
+                str(transaction.sender)
+                + str(transaction.receiver)
+                + str(transaction.amount)
+            )
         return sha256(data.encode("utf-8")).hexdigest()
 
     def mine(self, difficulty: int) -> str:

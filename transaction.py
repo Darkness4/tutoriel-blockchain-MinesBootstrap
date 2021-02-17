@@ -24,7 +24,9 @@ class Transaction:
             receiver=data["receiver"],
             amount=float(data["amount"]),
             timestamp=float(data["timestamp"]),
-            tx_number=int(data["tx_number"]),
+            tx_number=None
+            if not data["tx_number"]
+            else int(data["tx_number"]),
         )
 
     @classmethod

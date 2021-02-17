@@ -122,11 +122,11 @@ class Blockchain:
         return asdict(self)
 
     def to_json(self) -> str:
-        return json.dumps(self.to_dict())
+        return json.dumps(self.to_dict(), sort_keys=True)
 
     def to_jsonfile(self, pathfile: str = "blockchain.json"):
         with open(pathfile, "w") as file:
-            json.dump(self.to_dict(), file)
+            json.dump(self.to_dict(), file, sort_keys=True)
 
     @classmethod
     def from_dict(cls, data: dict):
