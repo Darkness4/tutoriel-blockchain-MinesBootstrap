@@ -1,6 +1,7 @@
 from dataclasses import asdict, dataclass
 import json
 from typing import Any, Dict, Optional
+import hashlib
 
 
 @dataclass
@@ -10,6 +11,17 @@ class Transaction:
     amount: float
     timestamp: float = 0
     tx_number: Optional[int] = None
+
+    def __hash__(self):
+        data = (
+            self.sender
+            + self.receiver
+            + str(self.amount)
+            + str(self.timestamp)
+        )
+        return int.from_bytes(
+            hashlib.sha256(data.encode("utf-8")).digest(), "big"
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

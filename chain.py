@@ -36,10 +36,11 @@ class Blockchain:
     def head(self) -> Block:
         return self.blocks[-1]
 
-    def add_transaction(self, transaction=Transaction):
-        self.tx_pool.append(transaction)
+    def add_transaction(self, transaction: Transaction):
+        if transaction not in self.tx_pool:
+            self.tx_pool.append(transaction)
 
-    def mine_block(self) -> Optional[Block]:
+    def mine_block(self, miner_address: str) -> Optional[Block]:
         if not self.tx_pool:
             return None
 
@@ -51,6 +52,14 @@ class Blockchain:
             timestamp=time.time(),
             previous_hash=self.head.hashval,
             miner=platform.node(),
+        )
+        self.tx_pool.append(
+            Transaction(
+                receiver=miner_address,
+                sender="NETWORK_ADMIN",
+                amount=self.block_reward,
+                timestamp=time.time(),
+            )
         )
         new_block.add_transactions(self.tx_pool)
         new_block.mine(self.difficulty)

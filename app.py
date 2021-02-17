@@ -8,7 +8,6 @@ import os
 import sys
 import threading
 from functools import partial
-from typing import Optional
 
 import zmq
 from PySide2 import QtCore, QtWidgets
@@ -30,7 +29,7 @@ wallet.to_file(file_name)
 
 difficulty = 3
 blockchain: Blockchain = Blockchain(difficulty)
-peers = set()  # TODO: Add here, our client
+peers = set()
 
 # list_ports = ["5556", "5557", "5558"]
 
@@ -43,7 +42,7 @@ socket: Socket = context.socket(zmq.PUB)
 
 socket.bind("tcp://*:%s" % port_bind)
 
-topic = ""  # TODO: Maybe edit our topic
+topic = ""
 ip = "localhost" + ":" + port_bind
 socket_sub: Socket = context.socket(zmq.SUB)
 for elem in list(peers):
@@ -69,13 +68,21 @@ def reading_network():
             if "operation" in data:
                 parameters = data["parameters"]
                 if data["operation"] == "add_transaction":
-                    blockchain.add_transaction(
-                        transaction=Transaction.from_dict(
-                            parameters["transaction"]
-                        )
+                    new_transaction = Transaction.from_dict(
+                        parameters["transaction"]
                     )
-                # elif data["operation"] == "add_peer":
-                #     add_peer(Blockchain.from_dict(parameters["blockchain"]))
+                    if new_transaction not in blockchain.tx_pool:
+                        blockchain.add_transaction(transaction=new_transaction)
+                        socket.send_json(
+                            {
+                                "operation": "add_transaction",
+                                "parameters": {
+                                    "transaction": parameters["transaction"],
+                                },
+                            }
+                        )
+                elif data["operation"] == "add_peer":
+                    add_peer(Blockchain.from_dict(parameters["blockchain"]))
                 elif data["operation"] == "consensus":
                     socket.send_json(
                         {
@@ -92,8 +99,24 @@ def reading_network():
                         and peer_blockchain.is_valid()
                     ):
                         blockchain = peer_blockchain
+                        socket.send_json(
+                            {
+                                "operation": "consensus_resp",
+                                "parameters": {
+                                    "blockchain": blockchain.to_dict()
+                                },
+                            }
+                        )
                 elif data["operation"] == "add_block":
-                    add_block(Block.from_dict(parameters["block"]))
+                    new_block = Block.from_dict(parameters["block"])
+                    if new_block not in blockchain.blocks:
+                        add_block(new_block)
+                        socket.send_json(
+                            {
+                                "operation": "add_block",
+                                "parameters": {"block": parameters["block"]},
+                            }
+                        )
 
         except Exception as e:
             print(f"ERROR: {e}")
@@ -102,21 +125,22 @@ def reading_network():
 def add_peer(new_blockchain: Blockchain):
     global blockchain
 
-    validated_blockchain = Blockchain(difficulty)
-    for block in new_blockchain.blocks:
-        if block.index != 0:
-            added = validated_blockchain.add_block_from_peer(block)
-            if not added:
-                logging.error("Bad blockchain. No peer added.")
-                return
-        else:
-            validated_blockchain.blocks[0] = block
+    if len(new_blockchain) >= len(blockchain):  # Pseudo-consensus
+        validated_blockchain = Blockchain(difficulty)
+        for block in new_blockchain.blocks:
+            if block.index != 0:
+                added = validated_blockchain.add_block_from_peer(block)
+                if not added:
+                    logging.error("Bad blockchain. No peer added.")
+                    return
+            else:
+                validated_blockchain.blocks[0] = block
 
-    if not validated_blockchain.is_valid():
-        logging.error("Bad blockchain. No peer added.")
-        return
+        if not validated_blockchain.is_valid():
+            logging.error("Bad blockchain. No peer added.")
+            return
 
-    blockchain = validated_blockchain
+        blockchain = validated_blockchain
 
 
 def add_block(block: Block):
@@ -199,7 +223,6 @@ class Tx_Dialog(QtWidgets.QDialog):
             return False
 
     def working_click(self):
-        # TODO: add send tx to other peers function here
         transaction = Transaction(
             address,
             self.tx_address.text(),
@@ -257,15 +280,15 @@ class Peer_Dialog(QtWidgets.QDialog):
 
     def working_click(self):
         # TODO: add send tx to other peers function here
-        # socket.send_json(
-        #     {
-        #         "operation": "add_peer",
-        #         "parameters": {
-        #             "address": address,
-        #             "blockchain": blockchain.to_dict(),
-        #         },
-        #     }
-        # )
+        socket.send_json(
+            {
+                "operation": "add_peer",
+                "parameters": {
+                    "address": address,
+                    "blockchain": blockchain.to_dict(),
+                },
+            }
+        )
         self.accept()
 
 
@@ -358,9 +381,8 @@ class MyWidget(QtWidgets.QWidget):
             msg.exec_()
 
     def mine_call(self):
-        # TODO: need to call the mining function
         global blockchain
-        result = blockchain.mine_block()
+        result = blockchain.mine_block(address)
         if not result:
             logging.info("No transaction to mine")
         else:
@@ -376,8 +398,7 @@ class MyWidget(QtWidgets.QWidget):
                     }
                 )
             logging.info(f"Block REGISTERED: {blockchain.head}")
-            for _ in range(self.tx_layout.rowCount()):
-                self.tx_layout.removeRow(0)
+            self.define_block(blockchain.head)
 
     @staticmethod
     def consensus():
@@ -394,8 +415,10 @@ class MyWidget(QtWidgets.QWidget):
         self.block_data.setText(block_str)
 
     def define_block(self, block):
-        self.block_data.setText(str(block))
-        for row in range(self.tx_layout.rowCount()):
+        self.block_data.setText(
+            json.dumps(block.to_dict(), sort_keys=True, indent=2)
+        )
+        for _ in range(self.tx_layout.rowCount()):
             self.tx_layout.removeRow(0)
 
     def send_tx(self):
