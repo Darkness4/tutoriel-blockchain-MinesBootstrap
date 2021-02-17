@@ -1,5 +1,6 @@
 import atexit
 import time
+from transaction import Transaction
 from block import Block
 import json
 import logging
@@ -69,12 +70,12 @@ def reading_network():
                 parameters = data["parameters"]
                 if data["operation"] == "add_transaction":
                     blockchain.add_transaction(
-                        sender=parameters["sender"],
-                        receiver=parameters["receiver"],
-                        amount=float(parameters["amount"]),
+                        transaction=Transaction.from_dict(
+                            parameters["transaction"]
+                        )
                     )
-                elif data["operation"] == "add_peer":
-                    add_peer(Blockchain.from_dict(parameters["blockchain"]))
+                # elif data["operation"] == "add_peer":
+                #     add_peer(Blockchain.from_dict(parameters["blockchain"]))
                 elif data["operation"] == "consensus":
                     socket.send_json(
                         {
@@ -199,16 +200,18 @@ class Tx_Dialog(QtWidgets.QDialog):
 
     def working_click(self):
         # TODO: add send tx to other peers function here
-        blockchain.add_transaction(
-            address, self.tx_address.text(), float(self.tx_amount.text())
+        transaction = Transaction(
+            address,
+            self.tx_address.text(),
+            float(self.tx_amount.text()),
+            time.time(),
         )
+        blockchain.add_transaction(transaction)
         socket.send_json(
             {
                 "operation": "add_transaction",
                 "parameters": {
-                    "sender": address,
-                    "receiver": self.tx_address.text(),
-                    "amount": float(self.tx_amount.text()),
+                    "transaction": transaction.to_dict(),
                 },
             }
         )
@@ -254,15 +257,15 @@ class Peer_Dialog(QtWidgets.QDialog):
 
     def working_click(self):
         # TODO: add send tx to other peers function here
-        socket.send_json(
-            {
-                "operation": "add_peer",
-                "parameters": {
-                    "address": address,
-                    "blockchain": blockchain.to_dict(),
-                },
-            }
-        )
+        # socket.send_json(
+        #     {
+        #         "operation": "add_peer",
+        #         "parameters": {
+        #             "address": address,
+        #             "blockchain": blockchain.to_dict(),
+        #         },
+        #     }
+        # )
         self.accept()
 
 
@@ -384,7 +387,7 @@ class MyWidget(QtWidgets.QWidget):
                 "parameters": None,
             }
         )
-        time.sleep(1)
+        time.sleep(2)
 
     @Slot(str)
     def get_block_str(self, block_str):

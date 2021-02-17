@@ -25,7 +25,7 @@ class Transaction:
             amount=float(data["amount"]),
             timestamp=float(data["timestamp"]),
             tx_number=None
-            if not data["tx_number"]
+            if data["tx_number"] is None
             else int(data["tx_number"]),
         )
 

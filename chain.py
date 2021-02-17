@@ -19,6 +19,9 @@ class Blockchain:
     def __post_init__(self):
         self.create_genesis_block()
 
+    def __len__(self):
+        return len(self.blocks)
+
     def create_genesis_block(self):
         if self.blocks:
             logging.warning(
@@ -33,18 +36,7 @@ class Blockchain:
     def head(self) -> Block:
         return self.blocks[-1]
 
-    def add_transaction(
-        self,
-        sender: str,
-        receiver: str,
-        amount: float,
-    ):
-        transaction = Transaction(
-            sender=sender,
-            receiver=receiver,
-            amount=amount,
-            timestamp=time.time(),
-        )
+    def add_transaction(self, transaction=Transaction):
         self.tx_pool.append(transaction)
 
     def mine_block(self) -> Optional[Block]:
