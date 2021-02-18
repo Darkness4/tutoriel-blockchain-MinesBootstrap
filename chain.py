@@ -1,6 +1,6 @@
 import json
+from key import BitcoinAccount
 import logging
-import platform
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
@@ -18,6 +18,13 @@ class Blockchain:
 
     def __post_init__(self):
         self.create_genesis_block()
+
+    @classmethod
+    def create(cls, difficulty: int, wallet: BitcoinAccount):
+        blockchain = cls(difficulty)
+        blockchain.head.sign(wallet)
+        blockchain.head.miner = wallet.to_address()
+        return blockchain
 
     def __len__(self):
         return len(self.blocks)
@@ -40,7 +47,7 @@ class Blockchain:
         if transaction not in self.tx_pool:
             self.tx_pool.append(transaction)
 
-    def mine_block(self, miner_address: str) -> Optional[Block]:
+    def mine_block(self, wallet: BitcoinAccount) -> Optional[Block]:
         if not self.tx_pool:
             return None
 
@@ -51,19 +58,20 @@ class Blockchain:
             index=self.head.index + 1,
             timestamp=time.time(),
             previous_hash=self.head.hashval,
-            miner=platform.node(),
+            miner=wallet.to_address(),
         )
-        self.tx_pool.append(
-            Transaction(
-                receiver=miner_address,
-                sender="NETWORK_ADMIN",
-                amount=self.block_reward,
-                timestamp=time.time(),
-            )
+        reward = Transaction(
+            receiver=wallet.to_address(),
+            sender="NETWORK_ADMIN",
+            amount=self.block_reward,
+            timestamp=time.time(),
+            signature="NETWORK_ADMIN",
         )
+        self.tx_pool.append(reward)
         new_block.add_transactions(self.tx_pool)
         new_block.mine(self.difficulty)
         result = self.__add_block(new_block)
+        result.sign(wallet)
         self.tx_pool.clear()
         return result
 

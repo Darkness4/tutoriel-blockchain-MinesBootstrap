@@ -1,7 +1,11 @@
-from dataclasses import asdict, dataclass
-import json
-from typing import Any, Dict, Optional
+import base64
 import hashlib
+import json
+from dataclasses import asdict, dataclass
+import logging
+from typing import Any, Dict, Optional
+
+from key import Account, verify_signature
 
 
 @dataclass
@@ -11,6 +15,7 @@ class Transaction:
     amount: float
     timestamp: float = 0
     tx_number: Optional[int] = None
+    signature: Optional[str] = None
 
     def __hash__(self):
         data = (
@@ -26,9 +31,6 @@ class Transaction:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
-
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
@@ -39,9 +41,26 @@ class Transaction:
             tx_number=None
             if data["tx_number"] is None
             else int(data["tx_number"]),
+            signature=data["signature"],
         )
 
-    @classmethod
-    def from_json(cls, data: str):
-        data_dict = json.loads(data)
-        return cls.from_dict(data_dict)
+    def sign(self, wallet: Account):
+        data = self.to_dict()
+        del data["signature"]
+        del data["tx_number"]
+        message = json.dumps(data, sort_keys=True)
+        signature = wallet.sign(message)
+        self.signature = base64.b64encode(signature).decode("ascii")
+        return signature
+
+    def verify(self):
+        data = self.to_dict()
+        del data["signature"]
+        del data["tx_number"]
+        message = json.dumps(data, sort_keys=True)
+        if self.signature is None:
+            logging.warning("Signature is None.")
+            return False
+        signature = base64.b64decode(self.signature.encode("ascii"))
+        address = self.sender
+        return verify_signature(signature.hex(), message, address)

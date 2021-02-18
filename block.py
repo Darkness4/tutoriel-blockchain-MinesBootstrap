@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import time
@@ -5,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from hashlib import sha256
 from typing import Any, Dict, Iterable, List, Optional
 
+from key import Account, verify_signature
 from transaction import Transaction
 
 
@@ -17,6 +19,7 @@ class Block:
     miner: Optional[str] = None
     hashval: Optional[str] = None
     transactions: List[Transaction] = field(default_factory=list)
+    signature: Optional[str] = None
 
     def add_transactions(self, transactions: Iterable[Transaction]):
         for transaction in transactions:
@@ -68,9 +71,6 @@ class Block:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
-
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
@@ -83,9 +83,55 @@ class Block:
             transactions=list(
                 map(Transaction.from_dict, data["transactions"])
             ),
+            signature=data["signature"],
         )
 
-    @classmethod
-    def from_json(cls, data: str):
-        data_dict = json.loads(data)
-        return cls.from_dict(data_dict)
+    def sign(self, wallet: Account):
+        data = self.to_dict()
+        del data["signature"]
+        message = json.dumps(data, sort_keys=True)
+        signature = wallet.sign(message)
+        self.signature = base64.b64encode(signature).decode("ascii")
+        return signature
+
+    def verify(self):
+        data = self.to_dict()
+        del data["signature"]
+        message = json.dumps(data, sort_keys=True)
+
+        if self.signature is None:
+            logging.warning("Signature is None.")
+            return False
+        signature = base64.b64decode(self.signature.encode("ascii"))
+
+        address = self.miner
+
+        if (
+            address is not None
+            and verify_signature(signature.hex(), message, address) != True
+        ):
+            logging.warning(
+                f"Signature Verification failed : signature={signature.hex()}"
+            )
+            return False
+
+        # check every transaction
+        for transaction in self.transactions:
+            if (
+                transaction.sender != "NETWORK_ADMIN"
+                and transaction.verify() != True
+            ):
+                logging.warning(
+                    f"Transaction Verification failed : {transaction}"
+                )
+                return False
+
+        # check hash
+        computed_hash = self.compute_hash()
+        if computed_hash != self.hashval:
+            logging.warning(
+                f"Hash computed failed : computed_hash={computed_hash}, hashval={self.hashval}"
+            )
+            return False
+
+        return True

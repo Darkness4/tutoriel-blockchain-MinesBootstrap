@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+import traceback
 from functools import partial
 from typing import Optional
 
@@ -17,6 +18,8 @@ from block import Block
 from chain import Blockchain
 from key import BitcoinAccount
 from transaction import Transaction
+
+logger = logging.getLogger()
 
 # wallet generation
 wallet = BitcoinAccount()
@@ -51,7 +54,7 @@ socket_sub.setsockopt_string(zmq.SUBSCRIBE, topic)
 
 
 class Connection(QObject):
-    write_block = Signal(str)
+    write_block = Signal(Block)
     write_transaction = Signal(Transaction)
 
 
@@ -67,29 +70,19 @@ def reading_network():
             if "operation" in data:
                 parameters = data["parameters"]
                 if data["operation"] == "add_transaction":
-                    new_transaction = Transaction.from_dict(
-                        parameters["transaction"]
-                    )
-                    if new_transaction not in blockchain.tx_pool:
-                        blockchain.add_transaction(transaction=new_transaction)
-                        socket.send_json(
-                            {
-                                "operation": "add_transaction",
-                                "parameters": {
-                                    "transaction": parameters["transaction"],
-                                },
-                            }
-                        )
-                        ConnectionWrite.write_transaction.emit(new_transaction)
+                    add_transaction(parameters)
                 elif data["operation"] == "add_peer":
                     add_peer(Blockchain.from_dict(parameters["blockchain"]))
                 elif data["operation"] == "consensus":
-                    socket.send_json(
-                        {
-                            "operation": "consensus_resp",
-                            "parameters": {"blockchain": blockchain.to_dict()},
-                        }
-                    )
+                    if blockchain is not None:
+                        socket.send_json(
+                            {
+                                "operation": "consensus_resp",
+                                "parameters": {
+                                    "blockchain": blockchain.to_dict()
+                                },
+                            }
+                        )
                 elif data["operation"] == "consensus_resp":
                     peer_blockchain = Blockchain.from_dict(
                         parameters["blockchain"]
@@ -108,25 +101,65 @@ def reading_network():
                             }
                         )
                 elif data["operation"] == "add_block":
-                    new_block = Block.from_dict(parameters["block"])
-                    if new_block not in blockchain.blocks:
-                        ConnectionWrite.write_block.emit(
-                            json.dumps(
-                                blockchain.head.to_dict(),
-                                sort_keys=True,
-                                indent=2,
-                            )
-                        )
-                        add_block(new_block)
-                        socket.send_json(
-                            {
-                                "operation": "add_block",
-                                "parameters": {"block": parameters["block"]},
-                            }
-                        )
+                    add_block(parameters)
 
-        except Exception as e:
-            print(f"ERROR: {e}")
+        except:
+            traceback.print_exc()
+
+
+def add_block(parameters):
+    new_block = Block.from_dict(parameters["block"])
+    if blockchain is None:
+        socket.send_json(
+            {
+                "operation": "consensus",
+                "parameters": None,
+            }
+        )
+        return
+
+    if new_block not in blockchain.blocks:
+        if not new_block.verify():
+            logging.warning("Block REJECTED: Basic verification failed.")
+            logging.warning(f"Block was {new_block}.")
+            return
+        result = blockchain.add_block_from_peer(new_block)
+        ConnectionWrite.write_block.emit(blockchain.head)
+
+        if not result:
+            logging.warning("A block from peer was discarded.")
+        else:
+            logging.warning(f"A block from peer was added: {result}")
+            socket.send_json(
+                {
+                    "operation": "add_block",
+                    "parameters": {"block": parameters["block"]},
+                }
+            )
+
+
+def add_transaction(parameters):
+    new_transaction = Transaction.from_dict(parameters["transaction"])
+    if (
+        new_transaction.sender != "NETTWORK_ADMIN"
+        and not new_transaction.verify()
+    ):
+        logging.warning("Transaction REJECTED: Basic verification failed.")
+        logging.warning(f"Transaction was {new_transaction}.")
+        return
+    if blockchain is not None and new_transaction.signature not in map(
+        lambda x: x.signature, blockchain.tx_pool
+    ):
+        blockchain.add_transaction(transaction=new_transaction)
+        socket.send_json(
+            {
+                "operation": "add_transaction",
+                "parameters": {
+                    "transaction": parameters["transaction"],
+                },
+            }
+        )
+        ConnectionWrite.write_transaction.emit(new_transaction)
 
 
 def add_peer(new_blockchain: Blockchain):
@@ -150,15 +183,6 @@ def add_peer(new_blockchain: Blockchain):
             return
 
         blockchain = validated_blockchain
-
-
-def add_block(block: Block):
-    result = blockchain.add_block_from_peer(block)
-
-    if not result:
-        logging.warning("A block from peer was discarded.")
-    else:
-        logging.warning(f"A block from peer was added: {result}")
 
 
 class Chain_Dialog(QtWidgets.QDialog):
@@ -229,6 +253,7 @@ class Tx_Dialog(QtWidgets.QDialog):
             float(self.tx_amount.text()),
             time.time(),
         )
+        transaction.sign(wallet)
         blockchain.add_transaction(transaction)
         ConnectionWrite.write_transaction.emit(transaction)
         socket.send_json(
@@ -364,7 +389,7 @@ class MyWidget(QtWidgets.QWidget):
         self.button_mine.clicked.connect(self.mine_call)
         self.button_peer.clicked.connect(self.add_peer)
 
-        ConnectionWrite.write_block.connect(self.get_block_str)
+        ConnectionWrite.write_block.connect(self.define_block_from_thread)
         ConnectionWrite.write_transaction.connect(self.define_tx_from_thread)
 
     def print_chain(self):
@@ -387,9 +412,11 @@ class MyWidget(QtWidgets.QWidget):
         global blockchain
 
         if blockchain is None:
-            blockchain = Blockchain(difficulty)
+            self.consensus()
+            if blockchain is None:
+                blockchain = Blockchain.create(difficulty, wallet)
         else:
-            result = blockchain.mine_block(address)
+            result = blockchain.mine_block(wallet)
             if not result:
                 logging.info("No transaction to mine")
             else:
@@ -417,9 +444,9 @@ class MyWidget(QtWidgets.QWidget):
         )
         time.sleep(2)
 
-    @Slot(str)
-    def get_block_str(self, block_str):
-        self.block_data.setText(block_str)
+    @Slot(Block)
+    def define_block_from_thread(self, block: Block):
+        self.define_block(block)
 
     @Slot(Transaction)
     def define_tx_from_thread(self, transaction: Transaction):
@@ -450,7 +477,7 @@ class MyWidget(QtWidgets.QWidget):
             msg.exec_()
 
     def define_tx(self, transaction: Transaction):
-        text = str(transaction)
+        text = json.dumps(transaction.to_dict(), sort_keys=True, indent=2)
         text_tx = QtWidgets.QLabel(text)
         text_tx.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         self.tx_layout.addRow(text_tx)
