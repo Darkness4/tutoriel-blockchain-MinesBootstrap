@@ -459,7 +459,8 @@ class MyWidget(QtWidgets.QWidget):
         for _ in range(self.tx_layout.rowCount()):
             self.tx_layout.removeRow(0)
 
-    def send_tx(self):
+    @staticmethod
+    def send_tx():
         global blockchain
         # open the tx dialog window
         if blockchain:
